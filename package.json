@@ -1,7 +1,7 @@
 {
   "name": "lxckyapi",
   "version": "0.1.0",
-  "description": "A Node.js SDK and low-level client for Minecraft Bedrock Realm connections.",
+  "description": "A Node.js Client connection to minecraft realms",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
