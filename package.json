@@ -1,0 +1,35 @@
+{
+  "name": "lxckyapi",
+  "version": "0.1.0",
+  "description": "A Node.js SDK and low-level client for Minecraft Bedrock Realm connections.",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./protocol": "./src/protocol/index.js",
+    "./package.json": "./package.json"
+  },
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "src",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "node --check src/index.js && node --check src/api/Realm.js && node --check src/api/ClientHandler.js && node --check src/protocol/realm-client.js && node --check src/protocol/client.js && node --check src/protocol/client/auth.js"
+  },
+  "dependencies": {
+    "@roamhq/wrtc": "^0.9.2",
+    "debug": "^4.4.0",
+    "json-bigint": "^1.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "prismarine-nbt": "^2.7.0",
+    "protodef": "^1.17.0",
+    "uuid": "^11.1.0",
+    "uuid-1345": "^1.0.2",
+    "ws": "^8.18.0"
+  }
+}
