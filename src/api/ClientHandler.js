@@ -159,6 +159,32 @@ class ClientHandler extends EventEmitter {
         })
     }
 
+    externalCommand(command, options = {}) {
+        this._assertConnected()
+        const value = String(command ?? '').trim()
+        if (!value) throw new Error('External command cannot be empty')
+        return this.client.sendExternalCommand(value, options)
+    }
+
+    externalMe(message, options = {}) {
+        const text = String(message ?? '').trim()
+        if (!text) throw new Error('External /me message cannot be empty')
+        return this.externalCommand(`/me ${text}`, options)
+    }
+
+    externalTell(player, message, options = {}) {
+        const target = String(player ?? '').trim()
+        const text = String(message ?? '').trim()
+        if (!target) throw new Error('External /tell target cannot be empty')
+        if (!text) throw new Error('External /tell message cannot be empty')
+        return this.externalCommand(`/tell ${target} ${text}`, options)
+    }
+
+    batchPackets(callback) {
+        this._assertConnected()
+        return this.client.batchPackets(callback)
+    }
+
     leave(reason = 'Client leaving') {
         if (!this.client) return
         const client = this.client
@@ -176,3 +202,4 @@ class ClientHandler extends EventEmitter {
 }
 
 module.exports = { ClientHandler }
+
