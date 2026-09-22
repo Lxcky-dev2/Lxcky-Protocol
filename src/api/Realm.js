@@ -119,6 +119,26 @@ class Realm extends EventEmitter {
 
     sendCommand(command, options) { return this.command(command, options) }
 
+    externalCommand(command, options = {}) {
+        this._requireHandler()
+        return this.handler.externalCommand(command, options)
+    }
+
+    externalMe(message, options = {}) {
+        this._requireHandler()
+        return this.handler.externalMe(message, options)
+    }
+
+    externalTell(player, message, options = {}) {
+        this._requireHandler()
+        return this.handler.externalTell(player, message, options)
+    }
+
+    batchPackets(callback) {
+        this._requireHandler()
+        return this.handler.batchPackets(callback)
+    }
+
     async leave(reason = 'Client leaving') {
         this._closing = true
         this.handler?.leave(reason)
