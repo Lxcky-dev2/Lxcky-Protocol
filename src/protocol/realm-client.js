@@ -63,22 +63,26 @@ function attachCommand(client) {
     client._pendingCommands = []
     client._commandOriginUUID = COMMAND_ORIGIN_UUID
 
+    function buildCommandPacket(command, originType, requestId = '') {
+        return {
+            command: String(command).startsWith('/') ? String(command) : `/${String(command)}`,
+            origin: {
+                type: originType,
+                uuid: originType === 'automationplayer' ? v4() : client._commandOriginUUID,
+                request_id: requestId,
+                player_entity_id: 0n
+            },
+            internal: false,
+            version: 'Latest'
+        }
+    }
+
     client.sendCommand = function sendCommand(command, options = {}) {
         if (!client.runtime) throw new Error('Cannot send command before the player has spawned')
 
         const waitForOutput = options.waitForOutput !== false
         if (!waitForOutput) {
-            client.write('command_request', {
-                command: String(command).startsWith('/') ? String(command) : `/${String(command)}`,
-                origin: {
-                    type: 'Player',
-                    uuid: client._commandOriginUUID,
-                    request_id: '',
-                    player_entity_id: 0n
-                },
-                internal: false,
-                version: 'Latest'
-            })
+            client.write('command_request', buildCommandPacket(command, 'Player'))
             return Promise.resolve({ success: true, sent: true, message: 'Command sent' })
         }
 
@@ -93,19 +97,29 @@ function attachCommand(client) {
             client._pendingCommands.push({ resolve, reject, timer, command: String(command) })
         })
 
-        client.write('command_request', {
-            command: String(command).startsWith('/') ? String(command) : `/${String(command)}`,
-            origin: {
-                type: 'Player',
-                uuid: client._commandOriginUUID,
-                request_id: '',
-                player_entity_id: 0n
-            },
-            internal: false,
-            version: 'Latest'
-        })
+        client.write('command_request', buildCommandPacket(command, 'Player'))
 
         return commandPromise
+    }
+
+    // external uses a Bedrock automationplayer command
+    // origin rather than a Player origin. This is what makes /me and /tell
+    // show as *External 
+    client.sendExternalCommand = function sendExternalCommand(command, options = {}) {
+        if (!client.runtime) throw new Error('Cannot send external command before the player has spawned')
+
+        const value = String(command ?? '').trim()
+        if (!value) throw new Error('External command cannot be empty')
+
+        client.write('command_request', buildCommandPacket(value, 'automationplayer', v4()))
+        return Promise.resolve({ success: true, sent: true, message: 'External command sent' })
+    }
+
+    client.sendExternalCommandBatch = function sendExternalCommandBatch(commands, options = {}) {
+        if (!Array.isArray(commands)) throw new TypeError('commands must be an array')
+        return client.batchPackets(() => {
+            for (const command of commands) client.sendExternalCommand(command, options)
+        })
     }
 
     client.on('command_output', (packet) => {
