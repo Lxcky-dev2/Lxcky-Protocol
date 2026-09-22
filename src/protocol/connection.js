@@ -3,13 +3,37 @@ const { Framer } = require('./transforms/framer')
 
 class Connection extends EventEmitter {
   batch = new Framer(this)
+  _batchDepth = 0
+
+  beginBatch() {
+    this._batchDepth++
+    return this
+  }
+
+  endBatch() {
+    if (this._batchDepth === 0) return this
+    this._batchDepth--
+    if (this._batchDepth === 0 && this.batch.packets.length) {
+      this.sendDecryptedBatch(this.batch)
+    }
+    return this
+  }
+
+  async batchPackets(callback) {
+    this.beginBatch()
+    try {
+      return await callback()
+    } finally {
+      this.endBatch()
+    }
+  }
 
   write(name, params) {
     if (!this.batch?.addEncodedPacket) return
     try { this.batch.addEncodedPacket(this.serializer.createPacketBuffer({ name, params })) }
     catch (error) { console.log(error) }
 
-    this.sendDecryptedBatch(this.batch)
+    if (this._batchDepth === 0) this.sendDecryptedBatch(this.batch)
   }
 
   sendBuffer(buffer) {
@@ -17,7 +41,7 @@ class Connection extends EventEmitter {
     try { this.batch.addEncodedPacket(buffer) }
     catch (error) { console.log(error) }
 
-    this.sendDecryptedBatch(this.batch)
+    if (this._batchDepth === 0) this.sendDecryptedBatch(this.batch)
   }
 
   sendDecryptedBatch(batch) { this.sendMCPE(batch.encode(), true) }
