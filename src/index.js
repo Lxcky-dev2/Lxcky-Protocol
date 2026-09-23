@@ -7,6 +7,7 @@ const { ChatMessage, DeathEvent } = require('./api/events')
 const { formatDeathMessage, DEATH_TEMPLATES } = require('./api/death')
 const { Client: ProtocolClient } = require('./protocol')
 const { createRealmClient } = require('./protocol/realm-client')
+const { RealmLoop } = require('./api/RealmLoop')
 
 class LxckyAPI {
     constructor(options = {}) {
@@ -22,7 +23,9 @@ class LxckyAPI {
         return realm
     }
 
-    getRealm(id) { return this.realms.get(String(id)) ?? this.realms.get(id) ?? null }
+    getRealm(id) {
+        return this.realms.get(String(id)) ?? this.realms.get(id) ?? null
+    }
 
     async join(options = {}) {
         const realm = this.createRealm(options)
@@ -30,8 +33,20 @@ class LxckyAPI {
         return realm
     }
 
+    createLoop(options = {}) {
+        return new RealmLoop(this, options)
+    }
+
+    async loop(options = {}) {
+        const loop = this.createLoop(options)
+        await loop.start()
+        return loop
+    }
+
     async disconnectAll(reason = 'API shutdown') {
-        for (const realm of [...this.realms.values()]) await realm.leave(reason)
+        for (const realm of [...this.realms.values()]) {
+            await realm.leave(reason)
+        }
     }
 }
 
@@ -47,5 +62,6 @@ module.exports = {
     DEATH_TEMPLATES,
     DEFAULT_DEVICE_PROFILE,
     ProtocolClient,
-    createRealmClient
+    createRealmClient,
+    RealmLoop
 }
