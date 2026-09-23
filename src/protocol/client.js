@@ -1,116 +1,292 @@
 const { Connection } = require('./connection.js')
 
 const { authenticate } = require('./client/auth.js')
-const { createDeserializer, createSerializer } = require('./transforms/serializer.js')
+const {
+    createDeserializer,
+    createSerializer
+} = require('./transforms/serializer.js')
 
-const { NethernetClient } = require('./nethernet.js')
-const { NethernetJSONRPC } = require('./websocket/signal-jsonrpc.js')
+const { NethernetClient } =
+    require('./nethernet.js')
+
+const { NethernetJSONRPC } =
+    require('./websocket/signal-jsonrpc.js')
 
 const JWT = require('jsonwebtoken')
 const crypto = require('crypto')
 const { v3, v4, NIL } = require('uuid')
 
-const steve = require("./skins/Steve.json")
+const steve =
+    require("./skins/Steve.json")
 
 class Client extends Connection {
     connection
 
     constructor(options) {
         super()
+
         this.options = { ...options }
-        this.compressionAlgorithm = 'deflate'
-        this.compressionThreshold = 512
-        this.compressionLevel = options.compressionLevel
+        this.compressionAlgorithm =
+            'deflate'
+
+        this.compressionThreshold =
+            512
+
+        this.compressionLevel =
+            options.compressionLevel
 
         this.nethernet = {}
     }
 
     async init() {
-        if (!this.options.networkId) throw new Error('A resolved Realm connection with a networkId is required by the low-level client. Use the high-level Realm API with a connection resolver so callers do not need to provide networkId directly.');
+        if (!this.options.networkId) {
+            throw new Error(
+                'A resolved Realm connection with a networkId is required by the low-level client. Use the high-level Realm API with a connection resolver so callers do not need to provide networkId directly.'
+            )
+        }
 
-        this.serializer = createSerializer()
-        this.deserializer = createDeserializer()
+        this.serializer =
+            createSerializer()
 
-        this.ecdhKeyPair = crypto.generateKeyPairSync('ec', { namedCurve: "secp384r1" })
-        this.clientX509 = this.ecdhKeyPair.publicKey.export({ format: 'der', type: 'spki' }).toString('base64')
-        this.privateKeyPEM = this.ecdhKeyPair.privateKey.export({ format: 'pem', type: 'sec1' })
+        this.deserializer =
+            createDeserializer()
 
-        await authenticate(this, this.options)
+        this.ecdhKeyPair =
+            crypto.generateKeyPairSync(
+                'ec',
+                {
+                    namedCurve: 'secp384r1'
+                }
+            )
 
-        this.connection = new NethernetClient({ networkId: this.options.networkId, token: this.token, ecdhKeyPair: this.ecdhKeyPair })
-        this.nethernet.signalling = new NethernetJSONRPC(this.connection.nethernet.networkId, this.options.authflow, this.options.version || "1.26.50", this.options.networkId)
+        this.clientX509 =
+            this.ecdhKeyPair.publicKey
+                .export({
+                    format: 'der',
+                    type: 'spki'
+                })
+                .toString('base64')
 
-        await this.nethernet.signalling.connect()
+        this.privateKeyPEM =
+            this.ecdhKeyPair.privateKey
+                .export({
+                    format: 'pem',
+                    type: 'sec1'
+                })
 
-        this.connection.nethernet.credentials = this.nethernet.signalling.credentials
-        this.connection.nethernet.signalHandler = this.nethernet.signalling.write.bind(this.nethernet.signalling)
-        this.nethernet.signalling.on('signal', signal => 
-            this.connection.nethernet.handleSignal(signal)
-                .catch(error => this.close(error.message))
+        await authenticate(
+            this,
+            this.options
         )
 
-        this.nethernet.signalling.on('error', () => { })
-        this.connection.nethernet.on('debug', () => { })
+        this.connection =
+            new NethernetClient({
+                networkId:
+                    this.options.networkId,
+                token: this.token,
+                ecdhKeyPair:
+                    this.ecdhKeyPair
+            })
 
-        this.emit('connectionAllowed')
+        this.nethernet.signalling =
+            new NethernetJSONRPC(
+                this.connection
+                    .nethernet
+                    .networkId,
+
+                this.options.authflow,
+
+                this.options.version ||
+                    '1.26.50',
+
+                this.options.networkId
+            )
+
+        // Keep a listener attached before connect() runs:
+        // an 'error' emitted during the handshake with no listener
+        // crashes the process.
+        this.nethernet.signalling.on(
+            'error',
+            error =>
+                this.close(
+                    error?.message ||
+                    'The Realm signalling connection was lost.'
+                )
+        )
+
+        await this.nethernet.signalling
+            .connect()
+
+        this.connection.nethernet.credentials =
+            this.nethernet.signalling.credentials
+
+        this.connection.nethernet.signalHandler =
+            this.nethernet.signalling.write.bind(
+                this.nethernet.signalling
+            )
+
+        this.nethernet.signalling.on(
+            'signal',
+            signal =>
+                this.connection.nethernet
+                    .handleSignal(signal)
+                    .catch(
+                        error =>
+                            this.close(
+                                error.message
+                            )
+                    )
+        )
+
+        this.connection.nethernet.on(
+            'debug',
+            () => {}
+        )
+
+        this.emit(
+            'connectionAllowed'
+        )
     }
 
     connect() {
-        if (!this.connection || !this.nethernet.signalling) throw new Error('Connect not currently allowed')
+        if (
+            !this.connection ||
+            !this.nethernet.signalling
+        ) {
+            throw new Error(
+                'Connect not currently allowed'
+            )
+        }
 
-        this.connection.onConnected = () => this.write('request_network_settings', { client_protocol: this.options?.protocolVersion || 2193 });
+        this.connection.onConnected =
+            () =>
+                this.write(
+                    'request_network_settings',
+                    {
+                        client_protocol:
+                            this.options
+                                ?.protocolVersion ||
+                            2193
+                    }
+                )
 
-        this.connection.onCloseConnection = (reason) => { this.close(reason) }
-        this.connection.onEncapsulated = this.onEncapsulated
-        this.connection.connect().catch(error => this.close(error.message))
+        this.connection.onCloseConnection =
+            reason =>
+                this.close(reason)
+
+        this.connection.onEncapsulated =
+            this.onEncapsulated
+
+        this.connection
+            .connect()
+            .catch(
+                error =>
+                    this.close(
+                        error.message
+                    )
+            )
     }
 
-    onEncapsulated = (encapsulated) => {
-        this.handle(Buffer.from(encapsulated.buffer))
+    onEncapsulated = encapsulated => {
+        this.handle(
+            Buffer.from(
+                encapsulated.buffer
+            )
+        )
     }
 
     sendLogin() {
-        const sign = data => JWT.sign(data, this.ecdhKeyPair.privateKey, { algorithm: 'ES384', header: { x5u: this.clientX509 } })
+        const sign = data =>
+            JWT.sign(
+                data,
+                this.ecdhKeyPair.privateKey,
+                {
+                    algorithm: 'ES384',
+                    header: {
+                        x5u: this.clientX509
+                    }
+                }
+            )
 
         let packet = {
-            protocol_version: this.options?.protocolVersion || 2193,
+            protocol_version:
+                this.options?.protocolVersion ||
+                2193,
+
             tokens: {
-                identity: JSON.stringify({ AuthenticationType: 0, Certificate: undefined, Token: this.token }),
-                client: sign({ ClientRandomId: "Meow" })
+                identity: JSON.stringify({
+                    AuthenticationType: 0,
+                    Certificate:
+                        undefined,
+                    Token: this.token
+                }),
+
+                client: sign({
+                    ClientRandomId: 'Meow'
+                })
             }
         }
 
         try {
-            const PlayFabId = String(this.tokenData?.mid || "aed7e8a4d485a49a").toLowerCase()
+            const PlayFabId =
+                String(
+                    this.tokenData?.mid ||
+                    'aed7e8a4d485a49a'
+                ).toLowerCase()
 
             const payload = {
-                ClientRandomId: "Meow",
-                GameVersion: this.options?.version || "1.26.45",
+                ClientRandomId: 'Meow',
+
+                GameVersion:
+                    this.options?.version ||
+                    '1.26.45',
+
                 CurrentInputMode: 2,
                 DefaultInputMode: 2,
 
-                SelfSignedId: "",
+                SelfSignedId: '',
                 GUIScale: -1,
-                LanguageCode: ["en_US", "en_GB"][Math.floor(Math.random() * 2)],
 
-                DeviceId: v4().replace(/-/g, ""),
+                LanguageCode:
+                    [
+                        'en_US',
+                        'en_GB'
+                    ][
+                        Math.floor(
+                            Math.random() * 2
+                        )
+                    ],
+
+                DeviceId:
+                    v4().replace(
+                        /-/g,
+                        ''
+                    ),
+
                 DeviceOS: 1,
-                DeviceModel: "SAMSUNG SM-G955U",
+                DeviceModel:
+                    'SAMSUNG SM-G955U',
+
                 UIProfile: 1,
                 MaxViewDistance: 10,
                 MemoryTier: 3,
                 PlatformType: 1,
 
                 GraphicsMode: 1,
-                TrustedSkin: steve.PersonaSkin,
+                TrustedSkin:
+                    steve.PersonaSkin,
+
                 OverrideSkin: false,
                 FilterProfanity: false,
 
-                ThirdPartyName: this.tokenData?.xname || "Meow meow.",
-                ProfileHash: "",
+                ThirdPartyName:
+                    this.tokenData?.xname ||
+                    'Meow meow.',
 
-                PlatformOnlineId: "",
-                PlatformOfflineId: "",
+                ProfileHash: '',
+
+                PlatformOnlineId: '',
+                PlatformOfflineId: '',
 
                 IsEduMode: false,
                 TenantId: null,
@@ -120,78 +296,159 @@ class Client extends Connection {
                 ClientIsEditorCapable: true,
                 ClientEditorConnectionIntent: 2,
 
-                CompatibleWithClientSideChunkGen: true,
+                CompatibleWithClientSideChunkGen:
+                    true,
+
                 ...steve,
                 ...this.options?.skinData
             }
 
-            const updatePlayFabId = data => btoa(atob(data).replaceAll('aed7e8a4d485a49a-5', `${PlayFabId}-2`))
+            const updatePlayFabId =
+                data =>
+                    btoa(
+                        atob(data).replaceAll(
+                            'aed7e8a4d485a49a-5',
+                            `${PlayFabId}-2`
+                        )
+                    )
 
-            payload.SkinId = `persona-${PlayFabId}-2`
-            payload.SkinGeometryData = updatePlayFabId(payload.SkinGeometryData)
-            payload.SkinResourcePatch = updatePlayFabId(payload.SkinResourcePatch)
+            payload.SkinId =
+                `persona-${PlayFabId}-2`
 
-            packet.tokens.client = sign(payload)
+            payload.SkinGeometryData =
+                updatePlayFabId(
+                    payload.SkinGeometryData
+                )
+
+            payload.SkinResourcePatch =
+                updatePlayFabId(
+                    payload.SkinResourcePatch
+                )
+
+            packet.tokens.client =
+                sign(payload)
         } catch (error) {
             console.log(error)
         }
 
-        this.write('login', packet)
+        this.write(
+            'login',
+            packet
+        )
     }
 
-    disconnect(reason = 'Client leaving') {
-        if (!this.nethernet) return;
+    disconnect(
+        reason = 'Client leaving'
+    ) {
+        if (!this.nethernet) return
 
         this.close(reason)
     }
 
     close(reason) {
-        if (this.nethernet) this.emit('close', reason)
+        if (this.nethernet) {
+            this.emit(
+                'close',
+                reason
+            )
+        }
 
         this.batch = null
+
         this.connection?.close()
 
         this.removeAllListeners()
 
-        if (this.nethernet?.signalling) this.nethernet.signalling.destroy()
+        if (
+            this.nethernet?.signalling
+        ) {
+            this.nethernet.signalling
+                .destroy()
+        }
 
         this.nethernet = {}
     }
 
     readPacket(packet) {
         let des
-        try { des = this.deserializer.parsePacketBuffer(packet) }
-        catch (e) { return this.emit('error', e); }
+
+        try {
+            des =
+                this.deserializer
+                    .parsePacketBuffer(
+                        packet
+                    )
+        } catch (e) {
+            return this.emit(
+                'error',
+                e
+            )
+        }
 
         switch (des.data.name) {
             case 'network_settings':
-                this.compressionThreshold = des.data.params?.compression_threshold
-                this.compressionReady = true
-                this.batch.updateCompressionSettings(this)
+                this.compressionThreshold =
+                    des.data.params
+                        ?.compression_threshold
+
+                this.compressionReady =
+                    true
+
+                this.batch
+                    .updateCompressionSettings(
+                        this
+                    )
 
                 this.sendLogin()
-                break;
+                break
 
             case 'server_to_client_handshake':
-                this.write('client_to_server_handshake', {})
-                break;
+                this.write(
+                    'client_to_server_handshake',
+                    {}
+                )
+                break
 
             case 'disconnect':
-                this.emit('kick', des.data.params)
+                this.emit(
+                    'kick',
+                    des.data.params
+                )
+
                 this.close()
-                break;
+                break
 
             case 'item_registry':
-                des.data.params.itemstates?.forEach(state => {
-                    if (state.name === 'minecraft:shield') {
-                        this.serializer.proto.setVariable('ShieldItemID', state.runtime_id)
-                        this.deserializer.proto.setVariable('ShieldItemID', state.runtime_id)
-                    }
-                })
-                break;
+                des.data.params
+                    .itemstates
+                    ?.forEach(
+                        state => {
+                            if (
+                                state.name ===
+                                'minecraft:shield'
+                            ) {
+                                this.serializer.proto
+                                    .setVariable(
+                                        'ShieldItemID',
+                                        state.runtime_id
+                                    )
+
+                                this.deserializer.proto
+                                    .setVariable(
+                                        'ShieldItemID',
+                                        state.runtime_id
+                                    )
+                            }
+                        }
+                    )
+
+                break
         }
 
-        this.emit(des.data.name, des.data.params)
+        this.emit(
+            des.data.name,
+            des.data.params
+        )
     }
 }
 
