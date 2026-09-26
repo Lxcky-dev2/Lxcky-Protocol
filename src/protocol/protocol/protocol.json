@@ -51,6 +51,8 @@
     "bitflags": "native",
     "restBuffer": "native",
     "encapsulated": "native",
+    "maybeIncompleteArray": "native",
+    "optionalOnRemaining": "native",
     "nbt": "native",
     "lnbt": "native",
     "nbtLoop": "native",
@@ -1355,7 +1357,16 @@
         },
         {
           "name": "hand",
-          "type": "u8"
+          "type": [
+            "mapper",
+            {
+              "type": "u8",
+              "mappings": {
+                "0": "main_hand",
+                "1": "off_hand"
+              }
+            }
+          ]
         },
         {
           "name": "held_item",
@@ -1426,19 +1437,11 @@
               ]
             },
             {
-              "name": "container_presence",
-              "type": "bool"
-            },
-            {
               "name": "window_id",
               "type": [
                 "option",
                 "i8"
               ]
-            },
-            {
-              "name": "flag_presence",
-              "type": "bool"
             },
             {
               "name": "flags",
@@ -1521,28 +1524,22 @@
         {
           "name": "transaction_type",
           "type": [
-            "option",
-            [
-              "mapper",
-              {
-                "type": "varint",
-                "mappings": {
-                  "0": "normal",
-                  "1": "inventory_mismatch",
-                  "2": "item_use",
-                  "3": "item_use_on_entity",
-                  "4": "item_release"
-                }
+            "mapper",
+            {
+              "type": "varint",
+              "mappings": {
+                "0": "normal",
+                "1": "inventory_mismatch",
+                "2": "item_use",
+                "3": "item_use_on_entity",
+                "4": "item_release"
               }
-            ]
+            }
           ]
         },
         {
           "name": "actions",
-          "type": [
-            "option",
-            "TransactionActions"
-          ]
+          "type": "TransactionActions"
         },
         {
           "name": "transaction_data",
@@ -2169,7 +2166,7 @@
         },
         {
           "name": "skin_color",
-          "type": "li32"
+          "type": "i32"
         },
         {
           "name": "personal_pieces",
@@ -2224,7 +2221,7 @@
                       "array",
                       {
                         "count": 4,
-                        "type": "li32"
+                        "type": "i32"
                       }
                     ]
                   }
@@ -2263,101 +2260,102 @@
         }
       ]
     ],
-    "PlayerRecords": [
-      "array",
-      {
-        "countType": "varint",
-        "type": [
-          "container",
-          [
+    "PlayerRecord": [
+      "container",
+      [
+        {
+          "name": "type",
+          "type": [
+            "mapper",
             {
-              "name": "type",
-              "type": [
-                "mapper",
-                {
-                  "type": "varint",
-                  "mappings": {
-                    "0": "remove",
-                    "1": "add"
-                  }
-                }
-              ]
-            },
-            {
-              "name": "legacy_type",
-              "type": "u8"
-            },
-            {
-              "anon": true,
-              "type": [
-                "switch",
-                {
-                  "compareTo": "type",
-                  "fields": {
-                    "add": [
-                      "container",
-                      [
-                        {
-                          "name": "uuid",
-                          "type": "uuid"
-                        },
-                        {
-                          "name": "entity_unique_id",
-                          "type": "zigzag64"
-                        },
-                        {
-                          "name": "username",
-                          "type": "string"
-                        },
-                        {
-                          "name": "xbox_user_id",
-                          "type": "string"
-                        },
-                        {
-                          "name": "platform_chat_id",
-                          "type": "string"
-                        },
-                        {
-                          "name": "build_platform",
-                          "type": "DeviceOS"
-                        },
-                        {
-                          "name": "skin_data",
-                          "type": "Skin"
-                        },
-                        {
-                          "name": "is_teacher",
-                          "type": "bool"
-                        },
-                        {
-                          "name": "is_host",
-                          "type": "bool"
-                        },
-                        {
-                          "name": "is_subclient",
-                          "type": "bool"
-                        },
-                        {
-                          "name": "player_color",
-                          "type": "li32"
-                        }
-                      ]
-                    ],
-                    "remove": [
-                      "container",
-                      [
-                        {
-                          "name": "uuid",
-                          "type": "uuid"
-                        }
-                      ]
-                    ]
-                  }
-                }
-              ]
+              "type": "varint",
+              "mappings": {
+                "0": "remove",
+                "1": "add"
+              }
             }
           ]
-        ]
+        },
+        {
+          "name": "legacy_type",
+          "type": "u8"
+        },
+        {
+          "anon": true,
+          "type": [
+            "switch",
+            {
+              "compareTo": "type",
+              "fields": {
+                "add": [
+                  "container",
+                  [
+                    {
+                      "name": "uuid",
+                      "type": "uuid"
+                    },
+                    {
+                      "name": "entity_unique_id",
+                      "type": "zigzag64"
+                    },
+                    {
+                      "name": "username",
+                      "type": "string"
+                    },
+                    {
+                      "name": "xbox_user_id",
+                      "type": "string"
+                    },
+                    {
+                      "name": "platform_chat_id",
+                      "type": "string"
+                    },
+                    {
+                      "name": "build_platform",
+                      "type": "li32"
+                    },
+                    {
+                      "name": "skin_data",
+                      "type": "Skin"
+                    },
+                    {
+                      "name": "is_teacher",
+                      "type": "bool"
+                    },
+                    {
+                      "name": "is_host",
+                      "type": "bool"
+                    },
+                    {
+                      "name": "is_subclient",
+                      "type": "bool"
+                    },
+                    {
+                      "name": "player_color",
+                      "type": "i32"
+                    }
+                  ]
+                ],
+                "remove": [
+                  "container",
+                  [
+                    {
+                      "name": "uuid",
+                      "type": "uuid"
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    ],
+    "PlayerRecords": [
+      "maybeIncompleteArray",
+      {
+        "countType": "varint",
+        "type": "PlayerRecord"
       }
     ],
     "Enchant": [
@@ -2995,10 +2993,6 @@
               "type": "zigzag32"
             },
             {
-              "name": "containers_presence",
-              "type": "bool"
-            },
-            {
               "name": "containers",
               "type": [
                 "option",
@@ -3033,10 +3027,6 @@
                                   {
                                     "name": "count",
                                     "type": "u8"
-                                  },
-                                  {
-                                    "name": "item_stack_id_presence",
-                                    "type": "bool"
                                   },
                                   {
                                     "name": "item_stack_id",
@@ -4406,7 +4396,7 @@
           "9": "Dedicated",
           "10": "TVOS",
           "11": "Orbis",
-          "12": "Nintendo",
+          "12": "NintendoSwitch",
           "13": "Xbox",
           "14": "WindowsPhone",
           "15": "Linux"
@@ -5316,21 +5306,24 @@
           "119": "realms_timeline_required",
           "120": "guest_withough_host",
           "121": "failed_to_join_experience",
-          "122": "host_signed_out",
-          "123": "script_watchdog_exception",
-          "124": "script_memory_limit_exceeded",
-          "125": "storage_low_during_gameplay",
-          "126": "storage_full_during_gameplay",
-          "127": "level_storage_corruption",
-          "128": "edition_mismatch_vanilla_to_edu",
-          "129": "edition_mismatch_edu_to_vanilla",
-          "130": "editor_mismatch_editor_to_vanilla",
-          "131": "editor_mismatch_vanilla_to_editor",
-          "132": "deny_listed",
-          "133": "nonce_missing",
-          "134": "nonce_not_found",
-          "135": "nonce_expired",
-          "136": "nonce_not_valid",
+          "122": "nethernet_data_channel_closed",
+          "123": "discovery_environment_mismatch",
+          "124": "host_without_keys",
+          "125": "host_signed_out",
+          "126": "script_watchdog_exception",
+          "127": "script_memory_limit_exceeded",
+          "128": "storage_low_during_gameplay",
+          "129": "storage_full_during_gameplay",
+          "130": "level_storage_corruption",
+          "131": "edition_mismatch_vanilla_to_edu",
+          "132": "edition_mismatch_edu_to_vanilla",
+          "133": "editor_mismatch_editor_to_vanilla",
+          "134": "editor_mismatch_vanilla_to_editor",
+          "135": "deny_listed",
+          "136": "nonce_missing",
+          "137": "nonce_not_found",
+          "138": "nonce_expired",
+          "139": "nonce_not_valid",
           "140": "host_disconnected",
           "141": "editor_join_intent_policy_failure",
           "142": "nethernet_identity_not_allowed",
@@ -6785,19 +6778,6 @@
         }
       ]
     ],
-    "NoiseAlignment": [
-      "container",
-      [
-        {
-          "name": "type",
-          "type": "u8"
-        },
-        {
-          "name": "value",
-          "type": "lu32"
-        }
-      ]
-    ],
     "EnvironmentAttributeData": [
       "container",
       [
@@ -6842,10 +6822,6 @@
         {
           "name": "noise_transition",
           "type": "bool"
-        },
-        {
-          "name": "noise_alignment",
-          "type": "NoiseAlignment"
         }
       ]
     ],
@@ -7138,13 +7114,6 @@
           ]
         },
         {
-          "name": "line_gap_height",
-          "type": [
-            "option",
-            "lf32"
-          ]
-        },
-        {
           "name": "depth_test",
           "type": [
             "option",
@@ -7194,6 +7163,36 @@
         {
           "name": "party_leader",
           "type": "bool"
+        }
+      ]
+    ],
+    "HeightMap": [
+      "array",
+      {
+        "count": 16,
+        "type": [
+          "array",
+          {
+            "countType": "varint",
+            "type": "i8"
+          }
+        ]
+      }
+    ],
+    "FurnaceOptions": [
+      "container",
+      [
+        {
+          "name": "left_furnace_tab",
+          "type": "zigzag32"
+        },
+        {
+          "name": "filtering",
+          "type": "bool"
+        },
+        {
+          "name": "layout",
+          "type": "zigzag32"
         }
       ]
     ],
@@ -7452,7 +7451,7 @@
                 "349": "send_party_destination_cookie",
                 "350": "party_destination_cookie_response",
                 "351": "set_player_furnace_options",
-                "352": "packet_record_started"
+                "352": "record_started"
               }
             }
           ]
@@ -8637,7 +8636,12 @@
         },
         {
           "name": "device_os",
-          "type": "DeviceOS"
+          "type": [
+            "optionalOnRemaining",
+            {
+              "type": "DeviceOS"
+            }
+          ]
         }
       ]
     ],
@@ -11893,7 +11897,7 @@
                     "type": [
                       "mapper",
                       {
-                        "type": "u8",
+                        "type": "varint",
                         "mappings": {
                           "0": "remove",
                           "1": "player",
@@ -11902,6 +11906,10 @@
                         }
                       }
                     ]
+                  },
+                  {
+                    "name": "entry_type_name",
+                    "type": "string"
                   },
                   {
                     "name": "scoreboard_id",
@@ -12885,14 +12893,11 @@
         {
           "name": "input_data",
           "type": [
-            "option",
-            [
-              "array",
-              {
-                "countType": "varint",
-                "type": "InputData"
-              }
-            ]
+            "array",
+            {
+              "countType": "varint",
+              "type": "InputData"
+            }
           ]
         },
         {
@@ -12959,10 +12964,6 @@
           "type": "vec3f"
         },
         {
-          "name": "transaction_presence",
-          "type": "bool"
-        },
-        {
           "name": "transaction",
           "type": [
             "option",
@@ -12974,15 +12975,8 @@
                   "type": "TransactionLegacy"
                 },
                 {
-                  "name": "actions_presence",
-                  "type": "bool"
-                },
-                {
                   "name": "actions",
-                  "type": [
-                    "option",
-                    "TransactionActions"
-                  ]
+                  "type": "TransactionActions"
                 },
                 {
                   "name": "data",
@@ -12993,19 +12987,11 @@
           ]
         },
         {
-          "name": "item_stack_request_presence",
-          "type": "bool"
-        },
-        {
           "name": "item_stack_request",
           "type": [
             "option",
             "ItemStackRequest"
           ]
-        },
-        {
-          "name": "block_action_presence",
-          "type": "bool"
         },
         {
           "name": "block_action",
@@ -13037,19 +13023,11 @@
           ]
         },
         {
-          "name": "vehicle_rotation_presence",
-          "type": "bool"
-        },
-        {
           "name": "vehicle_rotation",
           "type": [
             "option",
             "vec2f"
           ]
-        },
-        {
-          "name": "predicted_vehicle_presence",
-          "type": "bool"
         },
         {
           "name": "predicted_vehicle",
@@ -13885,12 +13863,7 @@
               "name": "heightmap",
               "type": [
                 "option",
-                [
-                  "buffer",
-                  {
-                    "count": 256
-                  }
-                ]
+                "HeightMap"
               ]
             },
             {
@@ -13901,12 +13874,7 @@
               "name": "render_heightmap",
               "type": [
                 "option",
-                [
-                  "buffer",
-                  {
-                    "count": 256
-                  }
-                ]
+                "HeightMap"
               ]
             },
             {
@@ -14067,11 +14035,11 @@
                     "type": "string"
                   },
                   {
-                    "name": "max_height",
+                    "name": "min_y",
                     "type": "zigzag32"
                   },
                   {
-                    "name": "min_height",
+                    "name": "height_range",
                     "type": "zigzag32"
                   },
                   {
@@ -14098,6 +14066,10 @@
                   {
                     "name": "pack_id",
                     "type": "uuid"
+                  },
+                  {
+                    "name": "default_biome",
+                    "type": "string"
                   }
                 ]
               ]
@@ -15930,7 +15902,8 @@
                     "mappings": {
                       "0": "float",
                       "1": "bool",
-                      "2": "string"
+                      "2": "string",
+                      "3": "string_list"
                     }
                   }
                 ]
@@ -15945,7 +15918,7 @@
                       "float": "lf32",
                       "bool": "bool",
                       "string": "string",
-                      "array": [
+                      "string_list": [
                         "array",
                         {
                           "countType": "varint",
@@ -16675,27 +16648,22 @@
       [
         {
           "name": "furnace_type",
-          "type": "u8"
+          "type": [
+            "mapper",
+            {
+              "type": "u8",
+              "mappings": {
+                "0": "none",
+                "1": "furnace",
+                "2": "blast_furnace",
+                "3": "smoker"
+              }
+            }
+          ]
         },
         {
           "name": "furnace_options",
-          "type": [
-            "container",
-            [
-              {
-                "name": "left_furnace_tab",
-                "type": "varint"
-              },
-              {
-                "name": "filtering",
-                "type": "bool"
-              },
-              {
-                "name": "layout",
-                "type": "varint"
-              }
-            ]
-          ]
+          "type": "FurnaceOptions"
         }
       ]
     ],
@@ -16703,11 +16671,11 @@
       "container",
       [
         {
-          "name": "block_position",
+          "name": "position",
           "type": "BlockCoordinates"
         },
         {
-          "name": "server_sound_handle",
+          "name": "handle",
           "type": "lu64"
         }
       ]
