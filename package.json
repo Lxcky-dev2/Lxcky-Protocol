@@ -22,7 +22,7 @@
     "check": "node --check src/index.js && node --check src/api/Realm.js && node --check src/api/ClientHandler.js && node --check src/protocol/realm-client.js && node --check src/protocol/client.js && node --check src/protocol/client/auth.js"
   },
   "dependencies": {
-    "@roamhq/wrtc": "^0.10.0"
+    "@roamhq/wrtc": "^0.10.0",
     "debug": "^4.4.0",
     "json-bigint": "^1.0.0",
     "jsonwebtoken": "^9.0.2",
