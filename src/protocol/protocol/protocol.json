@@ -46,13 +46,12 @@
     "varint64": "native",
     "zigzag32": "native",
     "zigzag64": "native",
+    "beargb": "native",
     "uuid": "native",
     "byterot": "native",
     "bitflags": "native",
     "restBuffer": "native",
     "encapsulated": "native",
-    "maybeIncompleteArray": "native",
-    "optionalOnRemaining": "native",
     "nbt": "native",
     "lnbt": "native",
     "nbtLoop": "native",
@@ -2304,6 +2303,10 @@
                     },
                     {
                       "name": "xbox_user_id",
+                      "type": "string"
+                    },
+                    {
+                      "name": "play_fab_id",
                       "type": "string"
                     },
                     {
@@ -8268,6 +8271,19 @@
           "type": "bool"
         },
         {
+          "name": "editor_level_migration_version",
+          "type": [
+            "mapper",
+            {
+              "type": "u8",
+              "mappings": {
+                "0": "legacy",
+                "1": "editor_achievements"
+              }
+            }
+          ]
+        },
+        {
           "name": "day_cycle_stop_time",
           "type": "zigzag32"
         },
@@ -8636,12 +8652,7 @@
         },
         {
           "name": "device_os",
-          "type": [
-            "optionalOnRemaining",
-            {
-              "type": "DeviceOS"
-            }
-          ]
+          "type": "DeviceOS"
         }
       ]
     ],
@@ -15787,7 +15798,11 @@
                             "2": "sphere",
                             "3": "circle",
                             "4": "text",
-                            "5": "arrow"
+                            "5": "arrow",
+                            "6": "cylinder",
+                            "7": "pyramid",
+                            "8": "ellipsoid",
+                            "9": "cone"
                           }
                         }
                       ]
@@ -15822,52 +15837,231 @@
                     ]
                   },
                   {
+                    "name": "max_render_distance",
+                    "type": [
+                      "option",
+                      "lf32"
+                    ]
+                  },
+                  {
                     "name": "color",
                     "type": [
                       "option",
-                      "li32"
+                      "beargb"
                     ]
                   },
                   {
-                    "name": "text",
+                    "name": "dimension_id",
                     "type": [
                       "option",
-                      "string"
+                      "zigzag32"
                     ]
                   },
                   {
-                    "name": "box_bound",
+                    "name": "attached_to_entity_id",
                     "type": [
                       "option",
-                      "vec3f"
+                      "zigzag64"
                     ]
                   },
                   {
-                    "name": "line_end_location",
+                    "name": "shape_data_type",
                     "type": [
-                      "option",
-                      "vec3f"
+                      "mapper",
+                      {
+                        "type": "varint",
+                        "mappings": {
+                          "0": "last",
+                          "1": "arrow",
+                          "2": "text",
+                          "3": "box",
+                          "4": "line",
+                          "5": "sphere",
+                          "6": "cylinder",
+                          "7": "pyramid",
+                          "8": "ellipsoid",
+                          "9": "cone"
+                        }
+                      }
                     ]
                   },
                   {
-                    "name": "arrow_head_length",
+                    "name": "shape_data",
                     "type": [
-                      "option",
-                      "lf32"
-                    ]
-                  },
-                  {
-                    "name": "arrow_head_radius",
-                    "type": [
-                      "option",
-                      "lf32"
-                    ]
-                  },
-                  {
-                    "name": "segment_count",
-                    "type": [
-                      "option",
-                      "u8"
+                      "switch",
+                      {
+                        "compareTo": "shape_data_type",
+                        "fields": {
+                          "last": "void",
+                          "arrow": [
+                            "container",
+                            [
+                              {
+                                "name": "arrow_end_location",
+                                "type": [
+                                  "option",
+                                  "vec3f"
+                                ]
+                              },
+                              {
+                                "name": "arrow_head_length",
+                                "type": [
+                                  "option",
+                                  "lf32"
+                                ]
+                              },
+                              {
+                                "name": "arrow_head_radius",
+                                "type": [
+                                  "option",
+                                  "lf32"
+                                ]
+                              },
+                              {
+                                "name": "segments",
+                                "type": [
+                                  "option",
+                                  "u8"
+                                ]
+                              }
+                            ]
+                          ],
+                          "text": [
+                            "container",
+                            [
+                              {
+                                "name": "text",
+                                "type": "string"
+                              },
+                              {
+                                "name": "use_rotation",
+                                "type": "bool"
+                              },
+                              {
+                                "name": "background_color",
+                                "type": [
+                                  "option",
+                                  "beargb"
+                                ]
+                              },
+                              {
+                                "name": "line_gap_height",
+                                "type": "lf32"
+                              },
+                              {
+                                "name": "depth_test",
+                                "type": "bool"
+                              },
+                              {
+                                "name": "show_backface",
+                                "type": "bool"
+                              },
+                              {
+                                "name": "show_backface_text",
+                                "type": "bool"
+                              }
+                            ]
+                          ],
+                          "box": [
+                            "container",
+                            [
+                              {
+                                "name": "box_bound",
+                                "type": "vec3f"
+                              }
+                            ]
+                          ],
+                          "line": [
+                            "container",
+                            [
+                              {
+                                "name": "line_end_location",
+                                "type": "vec3f"
+                              }
+                            ]
+                          ],
+                          "sphere": [
+                            "container",
+                            [
+                              {
+                                "name": "segments",
+                                "type": "u8"
+                              }
+                            ]
+                          ],
+                          "cylinder": [
+                            "container",
+                            [
+                              {
+                                "name": "radius_x",
+                                "type": "vec2f"
+                              },
+                              {
+                                "name": "radius_z",
+                                "type": "vec2f"
+                              },
+                              {
+                                "name": "height",
+                                "type": "lf32"
+                              },
+                              {
+                                "name": "num_segments",
+                                "type": "u8"
+                              }
+                            ]
+                          ],
+                          "pyramid": [
+                            "container",
+                            [
+                              {
+                                "name": "width",
+                                "type": "lf32"
+                              },
+                              {
+                                "name": "depth",
+                                "type": [
+                                  "option",
+                                  "lf32"
+                                ]
+                              },
+                              {
+                                "name": "height",
+                                "type": "lf32"
+                              }
+                            ]
+                          ],
+                          "ellipsoid": [
+                            "container",
+                            [
+                              {
+                                "name": "radii",
+                                "type": "vec3f"
+                              },
+                              {
+                                "name": "segments_per_axis",
+                                "type": "u8"
+                              }
+                            ]
+                          ],
+                          "cone": [
+                            "container",
+                            [
+                              {
+                                "name": "radii",
+                                "type": "vec2f"
+                              },
+                              {
+                                "name": "height",
+                                "type": "lf32"
+                              },
+                              {
+                                "name": "num_segments",
+                                "type": "u8"
+                              }
+                            ]
+                          ]
+                        }
+                      }
                     ]
                   }
                 ]
