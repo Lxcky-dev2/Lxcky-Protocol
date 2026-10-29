@@ -3,8 +3,6 @@
 const { Client } = require('./client')
 const { v4 } = require('uuid')
 
-const COMMAND_ORIGIN_UUID = v4()
-
 function buildClientOptions(authflow, connection, deviceProfile) {
     if (!connection || !String(connection.transport || '').includes('NETHERNET')) {
         throw new Error(`This build requires a NetherNet Realm connection; received ${connection?.transport ?? 'unknown'}`)
@@ -13,8 +11,8 @@ function buildClientOptions(authflow, connection, deviceProfile) {
     return {
         authflow,
         networkId: connection.networkId,
-        version: '1.26.50',
-        protocolVersion: 2193,
+        version: '1.26.60',
+        protocolVersion: 2225,
         transport: 'NETHERNET_JSONRPC',
         delayedInit: true,
         authTitle: deviceProfile.authTitle,
@@ -54,15 +52,15 @@ function buildClientOptions(authflow, connection, deviceProfile) {
             OverrideSkin: true,
             PersonaSkin: false,
             CapeOnClassicSkin: true,
-            PlayerTargetSelectorExpansion: true,
+            PlayerTargetSelectorExpansion: true, //unsure if this is a value but it works
         }
     }
 }
 
 function attachCommand(client) {
     client._pendingCommands = []
-    client._commandOriginUUID = COMMAND_ORIGIN_UUID
-
+    client._commandOriginUUID = v4()
+//external
     function buildCommandPacket(command, originType, requestId = '') {
         return {
             command: String(command).startsWith('/') ? String(command) : `/${String(command)}`,
@@ -102,9 +100,6 @@ function attachCommand(client) {
         return commandPromise
     }
 
-    // external uses a Bedrock automationplayer command
-    // origin rather than a Player origin. This is what makes /me and /tell
-    // show as *External 
     client.sendExternalCommand = function sendExternalCommand(command, options = {}) {
         if (!client.runtime) throw new Error('Cannot send external command before the player has spawned')
 
@@ -156,10 +151,6 @@ function attachChat(client) {
             rawtext: [{ text: relayText }]
         })
 
-        // Realm chat relay deliberately uses tellraw so the authenticated Realm
-        // player is the command executor while the supplied display name remains
-        // the visible chat prefix. Do not wait for command_output: tellraw can
-        // execute without returning a command result packet.
         await client.sendCommand(`/tellraw @a ${tellrawPayload}`, { waitForOutput: false })
     }
 }
@@ -276,8 +267,15 @@ function attachRealmEvents(client) {
     })
 }
 
-async function createRealmClient(authflow, connection, deviceProfile) {
+async function createRealmClient(authflow, connection, deviceProfile, version = null, extraOptions = {}) {
     const options = buildClientOptions(authflow, connection, deviceProfile)
+    if (version) options.version = version
+
+    // Replace skinData entirely when an override is provided
+    // Object.assign fields like AnimatedImageData[0].
+    if (extraOptions.skinDataOverride) {
+        options.skinData = extraOptions.skinDataOverride
+    }
     const client = new Client(options)
 
     client.kicked = false
@@ -288,28 +286,158 @@ async function createRealmClient(authflow, connection, deviceProfile) {
 
     client.currentPosition = { x: 0, y: 0, z: 0 }
     client.runtime = 0n
+    client.seed = null
 
-    client.once('start_game', ({ player_position = { x: 0, y: 0, z: 0 }, runtime_entity_id = 0, current_tick = 0 } = {}) => {
-        client.currentPosition = player_position
+    client.playerAuthInput = {
+        running: false,
+        interval: null,
+        packetsSent: 0,
+        startedAt: null,
+        lastError: null,
+        flags: new Set()
+    }
+
+    client.setPlayerAuthInputFlag = function setPlayerAuthInputFlag(name, enabled = true) {
+        const value = String(name)
+        if (!value) throw new TypeError('PlayerAuthInput flag cannot be empty')
+        if (enabled) client.playerAuthInput.flags.add(value)
+        else client.playerAuthInput.flags.delete(value)
+        return client
+    }
+
+    client.clearPlayerAuthInputFlags = function clearPlayerAuthInputFlags() {
+        client.playerAuthInput.flags.clear()
+        return client
+    }
+
+    client.stopPlayerAuthInput = function stopPlayerAuthInput() {
+        const state = client.playerAuthInput
+        if (state.interval) clearInterval(state.interval)
+        state.interval = null
+        state.running = false
+        return client
+    }
+
+    const NAN = Number.NaN
+    const POS_INF = Number.POSITIVE_INFINITY
+    const NEG_INF = Number.NEGATIVE_INFINITY
+
+    client.sendPlayerAuthInput = function sendPlayerAuthInput() {
+        const state = client.playerAuthInput
+        if (!client.runtime) return false
+
+        const params = {
+            pitch: NAN,
+            yaw: POS_INF,
+            position: { x: NAN, y: POS_INF, z: NEG_INF },
+            move_vector: { x: NAN, z: POS_INF },
+            head_yaw: NEG_INF,
+            input_data: [...state.flags],
+            input_mode: 'touch',
+            play_mode: 'normal',
+            interaction_model: 'classic',
+            interact_rotation: { x: NAN, z: NEG_INF },
+            tick: client.tick ?? 0n,
+            delta: { x: NAN, y: NEG_INF, z: POS_INF },
+            transaction: null,
+            item_stack_request: null,
+            block_action: null,
+            vehicle_rotation: null,
+            predicted_vehicle: null,
+            analogue_move_vector: { x: POS_INF, z: NEG_INF },
+            camera_orientation: { x: NAN, y: POS_INF, z: NEG_INF },
+            raw_move_vector: { x: NEG_INF, z: NAN }
+        }
+
+        const sent = client.write('player_auth_input', params)
+        if (!sent) {
+            state.lastError = new Error('Failed to serialize/send player_auth_input')
+            client.stopPlayerAuthInput()
+            return false
+        }
+
+        state.packetsSent += 1
+        if (typeof client.tick === 'bigint') client.tick += 1n
+        else client.tick = BigInt(client.tick ?? 0) + 1n
+        return true
+    }
+
+    client.startPlayerAuthInput = function startPlayerAuthInput(options = {}) {
+        const state = client.playerAuthInput
+        client.stopPlayerAuthInput()
+        state.packetsSent = 0
+        state.lastError = null
+        state.startedAt = Date.now()
+        state.running = true
+        client._playerAuthInputLastPosition = { ...client.currentPosition }
+
+        const intervalMs = Number(options.intervalMs ?? 30)
+        if (!Number.isFinite(intervalMs) || intervalMs < 1) {
+            client.stopPlayerAuthInput()
+            throw new TypeError('PlayerAuthInput intervalMs must be at least 1ms')
+        }
+
+        client.sendPlayerAuthInput()
+        if (!state.running) return client
+
+        const batchSize = Math.max(1, Number(options.batchSize ?? 1) | 0)
+        const sendBatch = () => {
+            const run = () => {
+                for (let i = 0; i < batchSize && state.running; i++) client.sendPlayerAuthInput()
+            }
+            if (typeof client.batchPackets === 'function') return client.batchPackets(run)
+            if (typeof client.queue === 'function' && typeof client.sendQ !== 'undefined') {
+                // bedrock-protocol: queue() collects into one batch flush sends it
+                const origWrite = client.write
+                client.write = (name, params) => { client.queue(name, params); return true }
+                try { run() } finally { client.write = origWrite }
+                if (typeof client._tick === 'function') client._tick()
+                return
+            }
+            run()
+        }
+
+        state.interval = setInterval(() => {
+            if (!state.running || !client.runtime) return
+            sendBatch()
+        }, intervalMs)
+
+        return client
+    }
+
+    client.once('close', () => client.stopPlayerAuthInput())
+
+    // Capture the start_game seed at the protocol layer the Realm API
+    // ClientHandler attaches after the low-level client is created
+    client.once('start_game', ({ player_position = { x: 0, y: 0, z: 0 }, runtime_entity_id = 0, current_tick = 0, seed = null } = {}) => {
+        client.currentPosition = {
+            x: Number(player_position?.x ?? 0),
+            y: Number(player_position?.y ?? 0),
+            z: Number(player_position?.z ?? 0)
+        }
         client.runtime = BigInt(runtime_entity_id)
         client.tick = typeof current_tick === 'bigint' ? current_tick : BigInt(current_tick || 0)
+        client._playerAuthInputLastPosition = { ...client.currentPosition }
+        if (seed != null) client.seed = typeof seed === 'bigint' ? seed.toString() : String(seed)
+
+        // Start the current-protocol PlayerAuthInput only after the
+        // server has supplied the runtime id and initial tick
+        client.startPlayerAuthInput({ intervalMs: 30, batchSize: 3 })
     })
 
     client.once('resource_packs_info', () => {
-        const finish = () => {
-            client.write('resource_pack_client_response', {
-                response_status: 'completed',
-                response_status_name: 'resourcepackstackfinished',
-                resourcepackids: []
-            })
-        }
-
-        client.once('resource_pack_stack', () => {
-            finish()
-            client.write('request_chunk_radius', { chunk_radius: 16, max_radius: 8 })
+        client.write('resource_pack_client_response', {
+            response_status: 'completed',
+            response_status_name: 'resourcepackstackfinished',
+            resourcepackids: []
         })
 
-        finish()
+
+        if (!extraOptions.noRCR) {
+            client.write('request_chunk_radius', { chunk_radius: 16, max_radius: 8 })
+        }
+
+        client.emit('join')
     })
 
     client.on('respawn', (data) => {
