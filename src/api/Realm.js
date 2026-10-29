@@ -7,7 +7,7 @@ const DEFAULT_DEVICE_PROFILE = Object.freeze({
     authTitle: '000000004c12ae6f',
     deviceType: 'Android',
     deviceOS: 1,
-    maxViewDistance: 10,
+    maxViewDistance: 2,
     memoryTier: 3,
     platformType: 1,
     UIProfile: 1,
@@ -19,6 +19,7 @@ class Realm extends EventEmitter {
         super()
         this.options = { ...options }
         this.authflow = options.authflow ?? null
+        this.version = options.version ?? '1.26.60'
         this.account = options.account ?? null
         this.code = options.code ?? null
         this.info = options.info ?? null
@@ -26,6 +27,7 @@ class Realm extends EventEmitter {
         this.status = 'disconnected'
         this.client = null
         this.handler = null
+        this.seed = null
         this.deviceProfile = { ...DEFAULT_DEVICE_PROFILE, ...(options.deviceProfile ?? {}) }
         this.identity = {
             xuid: options.xuid ?? this.account?.xuid ?? null,
@@ -39,9 +41,68 @@ class Realm extends EventEmitter {
 
     get players() { return this.handler?.players ?? null }
     get connected() { return this.status === 'connected' }
-    get name() { return this.info?.name ?? this.info?.name ?? null }
+    get name() { return this.info?.name ?? null }
     get realmId() { return this.info?.id ?? this.info?.realmId ?? null }
     get rawClient() { return this.client }
+    get worldSeed() { return this.seed }
+
+    async getSeed(options = {}) {
+        this._requireHandler()
+
+        if (this.seed != null) return this.seed
+        if (this.client?.seed != null) {
+            this.seed = typeof this.client.seed === 'bigint' ? this.client.seed.toString() : String(this.client.seed)
+            return this.seed
+        }
+
+        const timeout = Number(options.timeout ?? 10_000)
+        if (!Number.isFinite(timeout) || timeout <= 0) {
+            throw new TypeError('timeout must be a positive number')
+        }
+
+        return new Promise((resolve, reject) => {
+            let timer
+
+            const cleanup = () => {
+                clearTimeout(timer)
+                this.off('start_game', onStartGame)
+                this.off('kick', onKick)
+                this.off('close', onClose)
+            }
+
+            const onStartGame = packet => {
+                const seed = packet?.seed
+                if (seed == null) {
+                    cleanup()
+                    reject(new Error('The Realm start_game packet did not contain a seed'))
+                    return
+                }
+
+                this.seed = typeof seed === 'bigint' ? seed.toString() : String(seed)
+                cleanup()
+                resolve(this.seed)
+            }
+
+            const onKick = data => {
+                cleanup()
+                reject(new Error(data?.message ?? 'The Realm kicked the client before the seed was retrieved'))
+            }
+
+            const onClose = reason => {
+                cleanup()
+                reject(new Error(typeof reason === 'string' && reason ? reason : 'The Realm connection closed before the seed was retrieved'))
+            }
+
+            timer = setTimeout(() => {
+                cleanup()
+                reject(new Error(`Timed out waiting for the Realm seed after ${timeout}ms`))
+            }, timeout)
+
+            this.once('start_game', onStartGame)
+            this.once('kick', onKick)
+            this.once('close', onClose)
+        })
+    }
 
     async join(options = {}) {
         if (this.connected) return this
@@ -66,11 +127,16 @@ class Realm extends EventEmitter {
         this.connection = connection
         this.status = 'connecting'
         this.handler = new ClientHandler({ senderName: options.senderName ?? this.identity.gamertag })
+        // Forward exploit options to createRealmClient via ClientHandler
+        this.handler.extraOptions = {
+            noRCR:            this.options?.noRCR            ?? options.noRCR            ?? false,
+            skinDataOverride: this.options?.skinData         ?? this.options?.skinDataOverride ?? options.skinData ?? options.skinDataOverride ?? null,
+        }
         this._wireHandler(this.handler)
 
         try {
             const deviceProfile = { ...this.deviceProfile, ...(options.deviceProfile ?? {}) }
-            await this.handler.connect(authflow, connection, deviceProfile)
+            await this.handler.connect(authflow, connection, deviceProfile, options.version ?? this.version)
             this.client = this.handler.client
             this._configureClientIdentity(this.client)
             this.status = 'connected'
@@ -87,10 +153,13 @@ class Realm extends EventEmitter {
         const events = [
             'connected', 'disconnected', 'chat', 'death', 'playerJoin', 'playerLeave',
             'player', 'system', 'kick', 'error', 'close', 'start_game', 'command_output',
-            'resource_packs_info', 'resource_pack_stack', 'network_settings'
+            'resource_packs_info', 'resource_pack_stack', 'network_settings', 'join'
         ]
         for (const event of events) handler.on(event, data => {
             if (event === 'connected') this.status = 'connected'
+            if (event === 'start_game' && data?.seed != null) {
+                this.seed = typeof data.seed === 'bigint' ? data.seed.toString() : String(data.seed)
+            }
             if (event === 'disconnected' || event === 'close') this.status = 'disconnected'
             this.emit(event, data)
         })
@@ -145,6 +214,7 @@ class Realm extends EventEmitter {
         this.handler = null
         this.client = null
         this.connection = null
+        this.seed = null
         this.status = 'disconnected'
         this.emit('close', reason)
         return true
